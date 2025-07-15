@@ -276,4 +276,21 @@ public class LocalDatabase {
         }
         return changedReports;
     }
+
+    public Object getConnection() {
+        return connection;
+    }
+
+    public void close() {
+        try{
+            if (this.connection != null && !this.connection.isClosed()) {
+                this.connection.close();
+                System.out.println("Remote database connection closed.");
+            }
+            this.connection = null; // Clear the reference
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+    }
 }

@@ -16,9 +16,13 @@ public class SyncManager {
     LocalDatabase localDatabase = LocalDatabase.getInstance();
     RemoteDatabase remoteDatabase = new RemoteDatabase();
 
-    public void DownloadData(Zone zone){
+    public boolean DownloadData(Zone zone){
 
         try {
+            if (!remoteDatabase.connect()) {
+                System.err.println("Failed to connect to remote database. Aborting sync.");
+                return false;
+            }
             localDatabase.getAllNetworks();
             ArrayList<Network> connections = remoteDatabase.DownloadNetworkData();
             System.out.println("from remote" + connections);
@@ -49,7 +53,17 @@ public class SyncManager {
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
+        } finally {
+            try {
+                if (remoteDatabase != null) {
+                    remoteDatabase.close();
+                }
+            } catch (SQLException e) {
+                System.err.println("Error closing remote database connection: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
+        return false;
     }
 
     public LocalDatabase getLocalDatabase() {
@@ -88,12 +102,15 @@ public class SyncManager {
 
         boolean overallSuccess = true;
         try {
+            if (!remoteDatabase.connect()) {
+                System.err.println("Failed to connect to remote database. Aborting sync.");
+                return false;
+            }
             System.out.println("Starting synchronization process...");
             if (!syncTable("networks")) {
                 overallSuccess = false;
             }
 
-            // Sync 'reports' table
             if (!syncTable("reports")) {
                 overallSuccess = false;
             }
@@ -106,16 +123,27 @@ public class SyncManager {
             }
         } catch (Exception e) {
             overallSuccess = false;
+        } finally {
+            try {
+                if (remoteDatabase != null) {
+                    remoteDatabase.close();
+                }
+            } catch (SQLException e) {
+                System.err.println("Error closing remote database connection: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
-        // Sync 'networks' table
-
         return overallSuccess;
     }
 
     private boolean syncTable(String tableName) throws SQLException {
-        String currentSyncTimestamp = LocalDateTime.now().format(DB_TIMESTAMP_FORMATTER); // Timestamp for this sync attempt
+        if (remoteDatabase.getConnection() == null || remoteDatabase.getConnection().isClosed()) {
+            System.err.println("Remote database connection unexpectedly closed during syncTable for " + tableName);
+            return false;
+        }
+        String currentSyncTimestamp = LocalDateTime.now().format(DB_TIMESTAMP_FORMATTER);
         boolean tableSyncSuccess = true;
-        List<?> changedItems; // Use a wildcard for generic items
+        List<?> changedItems;
 
         try {
             if (!remoteDatabase.connect()) {
@@ -140,13 +168,11 @@ public class SyncManager {
 
             System.out.println("  Found " + changedItems.size() + " changes for table: " + tableName);
 
-            // --- Step 2: Push changes to remote DB ---
             for (Object item : changedItems) {
                 try {
                     if ("networks".equals(tableName) && item instanceof NetworkUpdateDTO) {
                         remoteDatabase.upsertNetwork((NetworkUpdateDTO) item);
                     } else if ("reports".equals(tableName) && item instanceof Report) {
-                        // You'll need to implement upsertReport in RemoteDbManager
                         remoteDatabase.upsertReport((Report) item);
 
                     }
@@ -182,4 +208,7 @@ public class SyncManager {
         return tableSyncSuccess;
     }
 
+    public RemoteDatabase getRemoteDatabase() {
+        return remoteDatabase;
+    }
 }

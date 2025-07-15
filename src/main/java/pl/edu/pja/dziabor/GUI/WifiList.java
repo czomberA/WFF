@@ -9,6 +9,9 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -174,26 +177,26 @@ public class WifiList extends JFrame {
         progressBar.setVisible(false); // Hidden by default
         contentPane.add(progressBar, "cell 0 3, span 2, growx");
         //TODO: implement this
-//        this.addWindowListener(new WindowAdapter() {
-//            @Override
-//            public void windowClosing(WindowEvent e) {
-//                System.out.println("Application closing. Attempting final cleanup...");
-//                try {
-//                    if (localDbManager != null && localDbManager.getLocalConnection() != null) { // Use getter if connection is private
-//                        localDbManager.getLocalConnection().close();
-//                        System.out.println("Local database connection closed.");
-//                    }
-//                    if (remoteDbManager != null && remoteDbManager.getRemoteConnection() != null) { // Use getter if connection is private
-//                        remoteDbManager.getRemoteConnection().close();
-//                        System.out.println("Remote database connection closed.");
-//                    }
-//                } catch (SQLException ex) {
-//                    System.err.println("Error closing database connections: " + ex.getMessage());
-//                }
-//                super.windowClosing(e);
-//            }
-//        });
-        // Span 2 columns, grow horizontally
+        this.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                System.out.println("Application closing. Attempting final cleanup...");
+                try {
+                    if (service.getSyncManager().getLocalDatabase() != null && service.getSyncManager().getLocalDatabase().getConnection() != null) {
+                        service.getSyncManager().getLocalDatabase().close();
+                        System.out.println("Local database connection closed.");
+                    }
+                    // Remote database connection should already be closed by SyncManager after sync
+                    // but for safety, ensure its internal connection is closed if it somehow remained open
+                    if (service.getSyncManager().getRemoteDatabase() != null) {
+                        service.getSyncManager().getRemoteDatabase().close(); // Attempt to close just in case
+                    }
+                } catch (SQLException ex) {
+                    System.err.println("Error closing database connections: " + ex.getMessage());
+                }
+                super.windowClosing(e);
+            }
+        });
     }
     private void setUiEnabled(boolean enabled) {
         table.setEnabled(enabled);

@@ -18,7 +18,7 @@ public class RemoteDatabase {
 
     public RemoteDatabase() {
         try {
-            Class.forName(LocalDatabase.DRIVER);
+            Class.forName("org.postgresql.Driver");
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
@@ -34,24 +34,36 @@ public class RemoteDatabase {
 //        }
     }
 
-    public boolean connect() {
+    public boolean connect() throws SQLException {
+        if (this.connection != null && !this.connection.isClosed()) {
+            System.out.println("Already connected to remote database.");
+            return true; // Already connected
+        }
         try {
-            connection = DriverManager.getConnection(URL, USER, PASSWORD);
-            stat = connection.createStatement();
-            if (connection != null) {
-                System.out.println("Connected to remote database");
+            this.connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            if (this.connection != null) {
+                System.out.println("Connected to remote database.");
                 return true;
             }
         } catch (SQLException e) {
-            System.err.println("Cannot connect to database");
+            System.err.println("Cannot connect to remote database: " + e.getMessage());
             e.printStackTrace();
+            throw e;
         }
-        return false;
+        return false; // Should ideally not be reached if exception is thrown
+    }
+
+    public void close() throws SQLException {
+        if (this.connection != null && !this.connection.isClosed()) {
+            this.connection.close();
+            System.out.println("Remote database connection closed.");
+        }
+        this.connection = null;
     }
 
     public ArrayList<Network> DownloadNetworkData() throws SQLException {
-        if (!connect()) {
-            throw new RuntimeException("Cannot connect to remote database");
+        if (connection == null || connection.isClosed()) {
+            throw new SQLException("Remote database connection is not open for DownloadNetworkData.");
         }
         ArrayList<Network> connections = new ArrayList<>();
         Network network;
@@ -66,16 +78,15 @@ public class RemoteDatabase {
             }
         } catch (SQLException ex) {
             System.out.println("IN REMOTE:" + ex.getMessage());
-        } finally {
-            connection.close();
         }
         return connections;
     }
 
 
-    // This method handles the UPSERT logic
     public void upsertNetwork(NetworkUpdateDTO network) throws SQLException {
-        // 1. Check if the network already exists remotely
+        if (connection == null || connection.isClosed()) {
+            throw new SQLException("Remote database connection is not open for DownloadNetworkData.");
+        }
         String checkSql = "SELECT COUNT(*) FROM networks WHERE bssid = ?";
         try (PreparedStatement psCheck = connection.prepareStatement(checkSql)) {
             psCheck.setString(1, network.getBssid());
@@ -91,13 +102,15 @@ public class RemoteDatabase {
         }
     }
 
+    //TODO: here and in pudate, also add lastSynch
     private void insertNetwork(NetworkUpdateDTO network) throws SQLException {
-        String insertSql = "INSERT INTO networks (ssid, password, lastUse, failed) VALUES (?, ?, ?, ?)";
+        String insertSql = "INSERT INTO networks (ssid, bssid, password, lastUse, failed) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement psInsert = connection.prepareStatement(insertSql)) {
             psInsert.setString(1, network.getSsid());
-            psInsert.setString(2, network.getPassword());
-            psInsert.setDate(3, java.sql.Date.valueOf(network.getLastSuccessfulConnection())); // Convert LocalDate to java.sql.Date
-            psInsert.setBoolean(4, network.isFailed());
+            psInsert.setString(2, network.getBssid());
+            psInsert.setString(3, network.getPassword());
+            psInsert.setDate(4, java.sql.Date.valueOf(network.getLastSuccessfulConnection()));
+            psInsert.setBoolean(5, network.isFailed());
             psInsert.executeUpdate();
             System.out.println("Inserted network remotely: " + network.getSsid());
         }
@@ -117,6 +130,9 @@ public class RemoteDatabase {
 
     public void upsertReport(Report report) {
         try{
+            if (connection == null || connection.isClosed()) {
+                throw new SQLException("Remote database connection is not open for upsertReport.");
+            }
             insertReport(report);
         } catch (Exception e) {
             throw new RuntimeException(e);
