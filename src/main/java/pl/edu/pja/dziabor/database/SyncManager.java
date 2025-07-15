@@ -183,7 +183,6 @@ public class SyncManager {
                 }
             }
 
-            // --- Step 3: Update last successful sync timestamp for this table ---
             if (tableSyncSuccess) {
                 localDatabase.updateLastSuccessfulSyncTimestamp(tableName, currentSyncTimestamp);
                 System.out.println("  Successfully synced table: " + tableName);
@@ -203,7 +202,7 @@ public class SyncManager {
             e.printStackTrace();
             tableSyncSuccess = false;
         } finally {
-            remoteDatabase.getConnection().close();
+            //remoteDatabase.getConnection().close();
         }
         return tableSyncSuccess;
     }
