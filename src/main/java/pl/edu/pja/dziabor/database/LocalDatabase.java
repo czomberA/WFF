@@ -269,7 +269,6 @@ public class LocalDatabase {
                     String bssid = rs.getString("bssid");
                     String date = rs.getString("date");
                     String reason = rs.getString("reason");
-//                    String classification = rs.getString("classification");
                     changedReports.add(new Report(bssid, LocalDate.parse(date), reason));
                 }
             }
@@ -292,5 +291,14 @@ public class LocalDatabase {
             e.printStackTrace();
         }
 
+    }
+
+    public void updatePassword(Network stored, String password) throws SQLException {
+        String updatePassword = "UPDATE networks SET password = ? WHERE bssid = ?";
+        try (PreparedStatement s = connection.prepareStatement(updatePassword)) {
+            s.setString(1, password);
+            s.setString(2, stored.getBssid());
+            s.executeUpdate();
+        }
     }
 }

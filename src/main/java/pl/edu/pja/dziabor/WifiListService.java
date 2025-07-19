@@ -18,7 +18,6 @@ public class WifiListService {
     private Networking networking;
     private ProfileManager profileManager;
     private void initialize(){
-        //device.setOs();
         this.networking = device.getNetworking();
         this.profileManager = device.getProfileManager();
     }
@@ -59,15 +58,6 @@ public class WifiListService {
     public void connectToNewNetwork(Network network, String text) {
         network.setPassword(text);
         networking.connectToNetwork(network, syncManager, profileManager, false);
-    }
-
-    public void updateServer() {
-        try{
-            syncManager.performSync();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
     }
 
     public SyncManager getSyncManager() {

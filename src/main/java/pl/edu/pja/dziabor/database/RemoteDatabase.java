@@ -3,6 +3,7 @@ package pl.edu.pja.dziabor.database;
 import pl.edu.pja.dziabor.Models.Network;
 import pl.edu.pja.dziabor.Models.NetworkUpdateDTO;
 import pl.edu.pja.dziabor.Models.Report;
+import pl.edu.pja.dziabor.Models.Zone;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -61,19 +62,24 @@ public class RemoteDatabase {
         this.connection = null;
     }
 
-    public ArrayList<Network> DownloadNetworkData() throws SQLException {
+    public ArrayList<Network> DownloadNetworkData(Zone zone) throws SQLException {
         if (connection == null || connection.isClosed()) {
             throw new SQLException("Remote database connection is not open for DownloadNetworkData.");
         }
         ArrayList<Network> connections = new ArrayList<>();
         Network network;
         try{
-        PreparedStatement stmt = connection.prepareStatement("SELECT * FROM networks");
-            ResultSet rs = stmt.executeQuery();
+        PreparedStatement stmt = connection.prepareStatement("SELECT * FROM networks where classification = ?");
+            stmt.setString(1, zone.toString());
+        ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                System.out.println("REMOTE:");
                 System.out.println(rs.getString("ssid"));
-                network = new Network(rs.getString("ssid"), rs.getString("bssid"), rs.getString("password"), LocalDate.parse(rs.getString("lastUse")));
+                network = new Network(
+                        rs.getString("ssid"),
+                        rs.getString("bssid"),
+                        rs.getString("password"),
+                        LocalDate.parse(rs.getString("lastUse")));
                 connections.add(network);
             }
         } catch (SQLException ex) {
@@ -104,13 +110,14 @@ public class RemoteDatabase {
 
     //TODO: here and in pudate, also add lastSynch
     private void insertNetwork(NetworkUpdateDTO network) throws SQLException {
-        String insertSql = "INSERT INTO networks (ssid, bssid, password, lastUse, failed) VALUES (?, ?, ?, ?, ?)";
+        String insertSql = "INSERT INTO networks (ssid, bssid, password, classification, lastUse, failed) VALUES (?, ?, ?, ?, ?, ?)";
         try (PreparedStatement psInsert = connection.prepareStatement(insertSql)) {
             psInsert.setString(1, network.getSsid());
             psInsert.setString(2, network.getBssid());
             psInsert.setString(3, network.getPassword());
-            psInsert.setDate(4, java.sql.Date.valueOf(network.getLastSuccessfulConnection()));
-            psInsert.setBoolean(5, network.isFailed());
+            psInsert.setString(4, network.getClassification());
+            psInsert.setDate(5, java.sql.Date.valueOf(network.getLastSuccessfulConnection()));
+            psInsert.setBoolean(6, network.isFailed());
             psInsert.executeUpdate();
             System.out.println("Inserted network remotely: " + network.getSsid());
         }
@@ -144,7 +151,6 @@ public class RemoteDatabase {
         try (PreparedStatement psInsert = connection.prepareStatement(insertSql)) {
             psInsert.setString(1, report.getBssid());
             psInsert.setString(2, report.getDate().toString());
-//            psInsert.setDate(3, java.sql.Date.valueOf(network.getLastSuccessfulConnection())); // Convert LocalDate to java.sql.Date
             psInsert.setString(3, report.getReason());
             psInsert.executeUpdate();
             System.out.println("Inserted report remotely: " + report.getBssid());

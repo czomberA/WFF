@@ -24,12 +24,13 @@ public class SyncManager {
                 return false;
             }
             localDatabase.getAllNetworks();
-            ArrayList<Network> connections = remoteDatabase.DownloadNetworkData();
+            ArrayList<Network> connections = remoteDatabase.DownloadNetworkData(zone);
             System.out.println("from remote" + connections);
             ArrayList<Network> newNetworks = new ArrayList<>();
             StringBuilder command = new StringBuilder("insert into networks (ssid, password, bssid, classification, lastuse) values ");
             boolean first = true;
             System.out.println("SAVED:" + localDatabase.getSavedNetworks());
+            List<Network> toUpdate = new ArrayList<>();
             for (Network network : connections) {
                 if(!localDatabase.getSavedNetworks().containsKey(network.getBssid())){
                     newNetworks.add(network);
@@ -43,6 +44,8 @@ public class SyncManager {
                             escapeSql(zone.toString()),
                             escapeSql(network.getLastSuccessfulConnection().toString())));
                     first = false;
+                } else {
+                    toUpdate.add(network);
                 }
             }
             if (!newNetworks.isEmpty()) {
@@ -50,6 +53,14 @@ public class SyncManager {
                 command.append(");");
                 System.out.println(command);
                 localDatabase.getStatement().execute(command.toString());
+            }
+
+            for (Network network : toUpdate) {
+                Network stored = localDatabase.getSavedNetworks().get(network.getBssid());
+                if (!stored.getPassword().equals(network.getPassword())) {
+                    localDatabase.updatePassword(stored, network.getPassword());
+                }
+
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -163,7 +174,7 @@ public class SyncManager {
 
             if (changedItems.isEmpty()) {
                 System.out.println("  No new changes for table: " + tableName);
-                return true; // No changes, still a success
+                return true;
             }
 
             System.out.println("  Found " + changedItems.size() + " changes for table: " + tableName);
@@ -201,8 +212,6 @@ public class SyncManager {
             System.err.println("  An unexpected error occurred during sync for table " + tableName + ": " + e.getMessage());
             e.printStackTrace();
             tableSyncSuccess = false;
-        } finally {
-            //remoteDatabase.getConnection().close();
         }
         return tableSyncSuccess;
     }
