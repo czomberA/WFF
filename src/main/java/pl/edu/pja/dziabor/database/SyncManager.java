@@ -14,8 +14,22 @@ import java.sql.SQLException; // Import for SQL exceptions
 public class SyncManager {
     private static final DateTimeFormatter DB_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     LocalDatabase localDatabase = LocalDatabase.getInstance();
+    //LocalDatabase localDatabase;
     RemoteDatabase remoteDatabase = new RemoteDatabase();
 
+    // TEST CONSTRUCTOR
+    SyncManager(LocalDatabase localDatabase) {
+        this.localDatabase = localDatabase;
+        //this.remoteDatabase = remoteDatabase;
+    }
+
+    void setLocalDb(LocalDatabase localDatabase) {
+        this.localDatabase = localDatabase;
+    }
+
+    public SyncManager() {
+
+    }
     public boolean DownloadData(Zone zone){
 
         try {

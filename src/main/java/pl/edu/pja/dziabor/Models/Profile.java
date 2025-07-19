@@ -33,4 +33,12 @@ public class Profile {
                 ", password='" + password + '\'' +
                 '}';
     }
+
+    public boolean isValid() {
+        if (SSID == null || password == null) {
+            return false;
+        }
+
+        return !SSID.isEmpty() && !password.isEmpty();
+    }
 }

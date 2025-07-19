@@ -66,4 +66,8 @@ public class NetworkUpdateDTO {
     public void setLastSuccessfulConnection(LocalDate lastSuccessfulConnection) {
         this.lastSuccessfulConnection = lastSuccessfulConnection;
     }
+
+    public String getSSID() {
+        return ssid;
+    }
 }

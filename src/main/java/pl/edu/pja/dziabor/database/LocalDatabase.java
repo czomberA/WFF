@@ -8,14 +8,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.Executors;
 
 public class LocalDatabase {
     public static final String DRIVER = "org.sqlite.JDBC";
-    public static final String DB_URL = "jdbc:sqlite:LocalDatabase.db";
     private final HashMap<String, Network> savedNetworks = new HashMap<>();
     private static final LocalDatabase instance = new LocalDatabase();
-    private static final DateTimeFormatter DB_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     private Connection connection;
     private Statement statement;
@@ -27,7 +24,7 @@ public class LocalDatabase {
             e.printStackTrace();
         }
         try {
-            connection = DriverManager.getConnection(DB_URL);
+            this.connection = connection = DriverManager.getConnection("jdbc:sqlite:LocalDatabase.db");
             statement = connection.createStatement();
         } catch (SQLException e) {
             System.err.println("Couldn't connect to database");
@@ -73,8 +70,13 @@ public class LocalDatabase {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
+//        initializeLastSynchTimes();
     }
-    public void insertNetwork(Network network){
+    public void insertNetwork(Network network) {
+        if (!network.isValid()) {
+            return;
+        }
         try {
             PreparedStatement prepStmt = connection.prepareStatement(
                     "insert into networks values (NULL, ?, ?, ?, ?, ?, ?, ?);");
@@ -109,13 +111,11 @@ public class LocalDatabase {
     public HashMap<String, Profile> getProfiles() {
         HashMap<String, Profile> profiles = new HashMap<>();
         Profile profile;
-        try{
-            PreparedStatement stmt = connection.prepareStatement("SELECT * FROM profiles");
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT * FROM profiles")) {
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 profile = new Profile(rs.getString("ssid"), rs.getString("password"));
                 profiles.put(profile.getSSID(), profile);
-                System.out.println("IN LOCAL DB: " + profile);
             }
         } catch (SQLException ex) {
             throw new RuntimeException(ex);
@@ -124,8 +124,10 @@ public class LocalDatabase {
     }
 
     public void addProfile(Profile profile) {
-        try {
-            PreparedStatement prepStmt = connection.prepareStatement("INSERT INTO profiles VALUES (NULL, ?, ?, ?)");
+        if (!profile.isValid()) {
+            throw new RuntimeException("Profile is invalid");
+        }
+        try (PreparedStatement prepStmt = connection.prepareStatement("INSERT INTO profiles VALUES (NULL, ?, ?, ?)");){
             prepStmt.setString(1, profile.getSSID());
             prepStmt.setString(2, profile.getPassword());
             prepStmt.setString(3, LocalDate.now().toString());
@@ -135,32 +137,33 @@ public class LocalDatabase {
         }
     }
 
+
     void getAllNetworksFromDB(HashMap<String, Network> networks) {
-        try{
-            Connection conn = DriverManager.getConnection(DB_URL);
-
-            String query = "SELECT ssid, bssid, password, lastUse FROM networks";
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery(query)) {
-
-                while (rs.next()) {
-                    String ssid = rs.getString("ssid");
-                    String bssid = rs.getString("bssid");
-                    String password = rs.getString("password");
-                    String lastUseStr = rs.getString("lastUse");
-                    Network dbEntry = new Network();
-                    dbEntry.setSsid(ssid);
-                    dbEntry.setBssid(bssid);
-                    dbEntry.setPassword(password);
-                    dbEntry.setLastSuccessfulConnection((LocalDate.parse(lastUseStr)));
-                    networks.put(bssid, dbEntry);
-                }
+        System.out.println("Get all networks from database");
+        String query = "SELECT ssid, bssid, password, lastUse FROM networks";
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next()) {
+                System.out.println(rs.getString("ssid") + " " + rs.getString("bssid"));
+                String ssid = rs.getString("ssid");
+                String bssid = rs.getString("bssid");
+                String password = rs.getString("password");
+                String lastUseStr = rs.getString("lastUse");
+                Network dbEntry = new Network();
+                dbEntry.setSsid(ssid);
+                dbEntry.setBssid(bssid);
+                dbEntry.setPassword(password);
+                dbEntry.setLastSuccessfulConnection((LocalDate.parse(lastUseStr)));
+                networks.put(bssid, dbEntry);
+                System.out.println("ENTRY: " + dbEntry);
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
     }
-    public void getAllNetworks(){
+
+    public void getAllNetworks() {
         getAllNetworksFromDB(savedNetworks);
     }
 
@@ -170,7 +173,7 @@ public class LocalDatabase {
         System.out.println("In last connection: " + network);
         if (failed){
             try{
-                PreparedStatement prepStmt = connection.prepareStatement("UPDATE networks set failed = 'TRUE' WHERE bssid = ?");
+                PreparedStatement prepStmt = connection.prepareStatement("UPDATE networks set failed = true WHERE bssid = ?");
                 prepStmt.setString(1, network.getBssid());
                 prepStmt.execute();
                 return;
@@ -182,8 +185,8 @@ public class LocalDatabase {
             try {
                 String date = LocalDate.now().toString();
                 PreparedStatement prepStmt = connection.prepareStatement("UPDATE networks SET lastUse = ? WHERE bssid = ?");
-                prepStmt.setString(1, date);      // or setTimestamp, if it's a timestamp
-                prepStmt.setString(2, network.getBssid());     // assuming bssid is a String
+                prepStmt.setString(1, date);
+                prepStmt.setString(2, network.getBssid());
                 prepStmt.execute();
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -206,13 +209,9 @@ public class LocalDatabase {
         return statement;
     }
 
-    public void setStatement(Statement statement) {
-        this.statement = statement;
-    }
-
     public List<NetworkUpdateDTO> getChangedNetworks(String lastSyncTimestamp) throws SQLException {
         List<NetworkUpdateDTO> changedNetworks = new ArrayList<>();
-        String sql = "SELECT ssid, bssid, password, classification, lastUse, failed FROM networks WHERE last_modified_at < ?";
+        String sql = "SELECT ssid, bssid, password, classification, lastUse, failed FROM networks WHERE last_modified_at <= ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, lastSyncTimestamp);
             try (ResultSet rs = ps.executeQuery()) {
@@ -231,7 +230,7 @@ public class LocalDatabase {
     }
 
     public String getLastSuccessfulSyncTimestamp(String tableName) throws SQLException {
-        String timestamp = "1970-01-01 00:00:00.000"; // Default to a very old timestamp
+        String timestamp = "1970-01-01 00:00:00.000";
         String sql = "SELECT last_sync_time FROM sync_status WHERE table_name = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, tableName);
@@ -250,6 +249,7 @@ public class LocalDatabase {
             ps.setString(1, tableName);
             ps.setString(2, timestamp);
             ps.executeUpdate();
+            System.out.println(ps.toString());
         }
     }
 
@@ -260,7 +260,7 @@ public class LocalDatabase {
         }
     }
 
-    public List<?> getChangedReports() throws SQLException {
+    public List<Report> getChangedReports() throws SQLException {
         List<Report> changedReports = new ArrayList<>();
         String sql = "SELECT * FROM reports";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -300,5 +300,23 @@ public class LocalDatabase {
             s.setString(2, stored.getBssid());
             s.executeUpdate();
         }
+    }
+
+    //----TEST METHODS
+    LocalDatabase(Connection connection) {
+        this.connection = connection;
+        try {
+            this.statement = connection.createStatement();
+            statement = connection.createStatement();
+        } catch (SQLException e) {
+            System.err.println("Couldn't connect to database");
+            e.printStackTrace();
+        }
+        CreateTables();
+    }
+
+    void initDb() {
+        System.out.println("Initializing local database...");
+        CreateTables();
     }
 }

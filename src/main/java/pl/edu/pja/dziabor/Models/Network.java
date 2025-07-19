@@ -83,4 +83,11 @@ public class Network {
     }
 
 
+    public boolean isValid() {
+        if (ssid == null || password == null || bssid == null) {
+            return false;
+        }
+
+        return !ssid.isEmpty() && !password.isEmpty() && !bssid.isEmpty();
+    }
 }
